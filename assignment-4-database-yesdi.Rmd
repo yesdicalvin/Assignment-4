@@ -28,7 +28,7 @@ Go to <https://console.cloud.google.com> and make sure you are logged in a non-u
 After you have initialized a project, paste your project ID into the following chunk.
 
 ```{r}
-project <- "assignment-4-database-yesdi1"
+project <- "assignment-4-database-yesdi"
 ```
 
 We will connect to a public database, the Chicago crime database, which has data on crime in Chicago.
@@ -51,31 +51,150 @@ We can look at the available tables in this database using `dbListTables`.
 dbListTables(con)
 ```
 
-## **SUDAH SAMPAI SINI
-
 Information on the \`crime\` table can be found here:
 
 <https://cloud.google.com/bigquery/public-data/chicago-crime-data>
 
 Write a first query that counts the number of rows of the \`crime\` table in the year 2016. Use code chunks with {sql connection = con} in order to write SQL code within the document.
 
+```{sql connection = con}
+SELECT COUNT(*) 
+FROM `bigquery-public-data.chicago_crime.crime` 
+WHERE EXTRACT(YEAR FROM date) = 2016
+```
+
 Next, count the number of arrests grouped by `primary_type` in 2016. Note that is a somewhat similar task as above, with some adjustments on which rows should be considered. Sort the results, i.e. list the number of arrests in a descending order.
+
+```{sql connection = con}
+SELECT primary_type, COUNT(*)
+FROM `bigquery-public-data.chicago_crime.crime`
+WHERE EXTRACT(YEAR FROM date) = 2016 AND arrest = TRUE
+GROUP BY primary_type
+ORDER BY COUNT(*) DESC;
+```
+
 
 We can also use the `date` for grouping. Count the number of arrests grouped by hour of the day in 2016. You can extract the latter information from `date` via `EXTRACT(HOUR FROM date)`. Which time of the day is associated with the most arrests?
 
+```{sql connection = con}
+SELECT EXTRACT(HOUR FROM date) AS hour, COUNT(*) AS arrests
+FROM `bigquery-public-data.chicago_crime.crime`
+WHERE EXTRACT(YEAR FROM date) = 2016 AND arrest = TRUE
+GROUP BY hour
+ORDER BY arrests DESC;
+```
+
+
 Focus only on `HOMICIDE` and count the number of arrests for this incident type, grouped by year. List the results in descending order.
+
+```{sql connection = con}
+SELECT EXTRACT(YEAR FROM date) AS year, COUNT(*) AS arrests
+FROM `bigquery-public-data.chicago_crime.crime`
+WHERE primary_type = 'HOMICIDE' AND arrest = TRUE
+GROUP BY year
+ORDER BY arrests DESC;
+```
+
 
 Find out which districts have the highest numbers of arrests in 2015 and 2016. That is, count the number of arrests in 2015 and 2016, grouped by year and district. List the results in descending order.
 
-Lets switch to writing queries from within R via the `DBI` package. Create a query object that counts the number of arrests grouped by `primary_type` of district 11 in year 2016. The results should be displayed in descending order.
+```{sql connection = con}
+SELECT EXTRACT(YEAR FROM date) AS year, district, COUNT(*) AS arrests
+FROM `bigquery-public-data.chicago_crime.crime`
+WHERE (EXTRACT(YEAR FROM date) = 2015 OR EXTRACT(YEAR FROM date) = 2016) AND arrest = TRUE
+GROUP BY year, district
+ORDER BY arrests DESC;
+```
 
-Execute the query.
+
+Lets switch to writing queries from within R via the `DBI` package. Create a query object that counts the number of arrests grouped by `primary_type` of district 11 in year 2016. The results should be displayed in descending order. Execute the query.
+
+```{r}
+install.packages("RSQLite")
+```
+
+
+```{r}
+library(DBI)
+query <- 
+  '
+  SELECT primary_type, COUNT(*) as count
+  FROM crime
+  WHERE EXTRACT(YEAR FROM date) = 2016 AND district = 11 AND arrest = TRUE
+  GROUP BY primary_type
+  ORDER BY count DESC
+  '
+
+# Use the connection to send the query to the database
+result <- dbGetQuery(con, query)
+
+# Print the data
+print(result)
+```
+
 
 Try to write the very same query, now using the `dbplyr` package. For this, you need to first map the `crime` table to a tibble object in R.
 
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+
+# Map the crime table to a tbl
+crime_tbl <- tbl(con, "crime")
+
+# Write the query
+query2 <- crime_tbl %>%
+  filter(year(date) == 2016, district == 11, arrest == TRUE) %>%
+  group_by(primary_type) %>%
+  summarise(arrest_count = n()) %>%
+  arrange(desc(arrest_count))
+
+# Collect results
+result2 <- query2 %>% collect()
+
+# Print the data
+print(result2)
+```
+
 Again, count the number of arrests grouped by `primary_type` of district 11 in year 2016, now using `dplyr` syntax.
 
+```{r}
+# Construct the query using dplyr functions
+query3 <- crime_tbl %>% 
+  mutate(year = year(date)) %>%
+  filter(year == 2016, district == 11, arrest == TRUE) %>%
+  group_by(primary_type) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+# Execute the query and fetch the results
+result3 <- query3 %>% collect()
+
+# View results
+print(result3)
+```
+
+
 Count the number of arrests grouped by `primary_type` and `year`, still only for district 11. Arrange the result by `year`.
+
+```{r}
+# Construct the query using dplyr functions
+query4 <- crime_tbl %>% 
+  mutate(year = year(date)) %>%
+  filter(district == 11, arrest == TRUE) %>%
+  group_by(year, primary_type) %>%
+  summarise(count = n()) %>%
+  arrange(year)
+
+# Execute the query and fetch the result
+result4 <- query4 %>% collect()
+
+# View results
+print(result4)
+```
 
 Assign the results of the query above to a local R object.
 
