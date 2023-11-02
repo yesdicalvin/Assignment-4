@@ -198,6 +198,11 @@ print(result4)
 
 Assign the results of the query above to a local R object.
 
+```{r}
+result_df <- query %>% collect()
+```
+
+
 Confirm that you pulled the data to the local environment by displaying the first ten rows of the saved data set.
 
 Close the connection.
